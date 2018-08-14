@@ -38,7 +38,7 @@
                 "*://*.kckern.info/*",
                 "*://*.kckern.info/*",
                 "*://*.lds.org/scriptures/*",
-                "*://*.lds.org/search/*"
+                "*://*.lds.org/search*"
             ],
             "js": [
                 "linker.js"
