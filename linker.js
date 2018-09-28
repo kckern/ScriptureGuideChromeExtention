@@ -61,7 +61,7 @@ books.push("judg\\.*(?:es)*");
 books.push("rut*h*\\.*");
 books.push("samu*\\.*(?:el)*");
 books.push("ki*n*gs*\\.*");
-books.push("chr*o*n*\\.*(?:icles)*");
+books.push("chro*n*\\.*(?:icles)*");
 books.push("ezr*\\.*(?:a)*");
 books.push("neh\\.*(?:emiah)*");
 books.push("esth*\\.*(?:er)*");
