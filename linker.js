@@ -297,8 +297,7 @@ if (runme) {
 
     for (var i = 0; i < elements.length; i++) {
         var element = elements[i];
-
-        element.normalize();
+        if(document.getElementById("root")===undefined)  element.normalize();
         for (var j = 0; j < element.childNodes.length; j++) {
             var node = element.childNodes[j];
 
