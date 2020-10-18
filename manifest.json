@@ -4,7 +4,7 @@
   "manifest_version": 2,
   "name": "Scripture Guide",
   "description": "In-browser integration of scripture.guide",
-  "version": "1.2.6.16",
+  "version": "1.2.6.17",
   "background": {
     "scripts": ["background.js"]
   },
@@ -20,8 +20,7 @@
     "content_scripts": [
         {
             "matches": [
-                "*://*/*",
-                "*://*.lds.org/scriptures/bd/*"
+                "*://*/*"
             ],
             "exclude_matches": [
                 "*://scripture.guide/*",
@@ -38,8 +37,7 @@
                 "*://*.bing.com/*",
                 "*://*.kckern.info/*",
                 "*://*.kckern.info/*",
-                "*://*.lds.org/scriptures/*",
-                "*://*.lds.org/search*"
+                "*://*.churchofjesuschrist.org/search*"
             ],
             "js": [
                 "linker.js"

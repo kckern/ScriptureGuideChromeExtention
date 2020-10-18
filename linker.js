@@ -14,7 +14,6 @@ style.innerHTML = "a.sg_autolink:link{ \
 	font-family: 'Kreon'; \
 	text-decoration:none!important; \
     border-radius:4px; \
-    line-height:26px; \
 	border:1px dotted #552B1B; \
 	padding: 0 .5em 0 .5em; \
 	background-color:#f2e5d9; }";
