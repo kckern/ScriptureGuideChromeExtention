@@ -95,54 +95,97 @@ for (var i = 0; i < a_elements.length; i++) {
 }
 
 if (runme) {
-    for (var i = 0; i < elements.length; i++) {
-        var element = elements[i];
-        if(document.getElementById("root")===undefined) element.normalize();
+    var batchSize = 10; // Reasonable batch size
+    var currentIndex = 0;
+    var processingTimeout = 100; // Longer delay to prevent freezing
+    
+    // Filter elements more efficiently - only text-heavy elements
+    var elementsToProcess = [];
+    var allElements = document.querySelectorAll('p, div, span, li, td, blockquote, cite, h1, h2, h3, h4, h5, h6');
+    
+    for (var i = 0; i < allElements.length; i++) {
+        var el = allElements[i];
+        if (!el.getAttribute("sg-flag") && el.textContent && el.textContent.length > 10) {
+            elementsToProcess.push(el);
+        }
+    }
+    
+    function processBatch() {
+        var processed = 0;
+        var startTime = Date.now();
         
-        // Skip if element already has our flag
-        if (element.getAttribute("sg-flag") != null) continue;
-
-        var originalHTML = element.innerHTML;
-        
-        // Use scripture-guide detectReferences to find and replace scripture references
-        var processedHTML = detectReferences(originalHTML, function(reference) {
-            // Convert reference to URL format
-            var link = reference.trim().toLowerCase().replace(/[\s:]+/g, '.').replace(/\.+/g, '.').replace(/;\./g, ';').replace(/,\./g, ',');
-
-            return ' <a class="sg_autolink" sg-flag="true" href="https://scripture.guide/' + link + '" target="_blank">' + reference + '</a> ';
-        });
-
-        // Only update if changes were made
-        if (processedHTML !== originalHTML) {
-            // Clean up spacing around links
-            processedHTML = processedHTML.replace(/([;, ]+(?:and)*)\s*<\/a>/gi, "</a>$1 ");
-            processedHTML = processedHTML.replace(/[;, ]+(?:and)*\s*\"/gi, "\"");
+        while (currentIndex < elementsToProcess.length && processed < batchSize) {
+            var element = elementsToProcess[currentIndex];
+            currentIndex++;
             
-            element.innerHTML = processedHTML;
+            // Skip if element is no longer in DOM or already processed
+            if (!document.contains(element) || element.getAttribute("sg-flag")) {
+                continue;
+            }
+            
+            // Quick check for existing links
+            if (element.querySelector('.sg_autolink')) {
+                element.setAttribute("sg-flag", "true");
+                continue;
+            }
+            
+            var originalHTML = element.innerHTML;
+            
+            // Skip very large elements to prevent slowdown
+            if (originalHTML.length > 5000) {
+                element.setAttribute("sg-flag", "true");
+                continue;
+            }
+            
+            // Skip elements that look like they contain CSS classes or complex HTML
+            if (originalHTML.indexOf('class="text-') > -1 || 
+                originalHTML.indexOf('hover:') > -1 ||
+                originalHTML.indexOf('focus-visible') > -1) {
+                element.setAttribute("sg-flag", "true");
+                continue;
+            }
+            
+            try {
+                var processedHTML = detectReferences(originalHTML, function(reference) {
+                    var link = reference.trim().toLowerCase().replace(/[\s:]+/g, '.').replace(/\.+/g, '.').replace(/;\./g, ';').replace(/,\./g, ',');
+                    return '<a class="sg_autolink" sg-flag="true" href="https://scripture.guide/' + link + '" target="_blank">' + reference + '</a>';
+                });
+
+                if (processedHTML !== originalHTML) {
+                    // Final safety check before setting innerHTML
+                    if (processedHTML.length > originalHTML.length * 2) {
+                        // Something went wrong, processed HTML is too large
+                        element.setAttribute("sg-flag", "true");
+                        continue;
+                    }
+                    
+                    element.innerHTML = processedHTML;
+                }
+            } catch (e) {
+                // Skip problematic elements
+            }
+            
             element.setAttribute("sg-flag", "true");
+            processed++;
+            
+            // Break if we've been processing too long
+            if (Date.now() - startTime > 50) break;
+        }
+        
+        // Continue processing if there are more elements
+        if (currentIndex < elementsToProcess.length) {
+            setTimeout(processBatch, processingTimeout);
+        } else {
+            // Done processing, add event listeners
+            addEventListenersToLinks();
+            setupSimpleMutationObserver();
         }
     }
-
-    // Handle nested links (when our links are inside existing links)
-    var newLinks = document.getElementsByClassName("sg_autolink");
-    for (var i = 0; i < newLinks.length; i++) {
-        if (newLinks[i].parentElement.tagName == "A") {
-            if (newLinks[i].parentElement.children.length > 1) continue;
-
-            var child = newLinks[i];
-            var parent = newLinks[i].parentElement;
-            var link = child.href;
-
-            child.outerHTML = child.innerText;
-            parent.outerHTML = ' <a class="sg_autolink" sg-flag="true" href="' + link + '" target="_blank">&#128279;</a> ' + parent.outerHTML;
-        }
-    }
-
-    // Add event listeners to all scripture links (CSP compliant)
+    
+    // Simplified event listener setup
     var addEventListenersToLinks = function() {
         var allScriptureLinks = document.getElementsByClassName("sg_autolink");
         for (var i = 0; i < allScriptureLinks.length; i++) {
-            // Check if event listener already added
             if (!allScriptureLinks[i].hasAttribute('data-sg-listener')) {
                 allScriptureLinks[i].addEventListener('click', function(e) {
                     e.preventDefault();
@@ -154,25 +197,137 @@ if (runme) {
         }
     };
     
-    // Add event listeners to existing links
-    addEventListenersToLinks();
-    
-    // Set up mutation observer to handle dynamically added content
-    var observer = new MutationObserver(function(mutations) {
-        var shouldAddListeners = false;
-        mutations.forEach(function(mutation) {
-            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                shouldAddListeners = true;
+    // Much simpler mutation observer
+    function setupSimpleMutationObserver() {
+        var mutationTimeout;
+        
+        var observer = new MutationObserver(function(mutations) {
+            var hasNewContent = false;
+            
+            for (var i = 0; i < mutations.length; i++) {
+                var mutation = mutations[i];
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    for (var j = 0; j < mutation.addedNodes.length; j++) {
+                        var node = mutation.addedNodes[j];
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Check if this looks like comment content
+                            if (node.textContent && node.textContent.length > 20) {
+                                hasNewContent = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (hasNewContent) break;
+                }
+            }
+            
+            if (hasNewContent) {
+                clearTimeout(mutationTimeout);
+                mutationTimeout = setTimeout(function() {
+                    processNewContent();
+                }, 200);
             }
         });
         
-        if (shouldAddListeners) {
-            setTimeout(addEventListenersToLinks, 50);
-        }
-    });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
     
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    // Function to process newly loaded content
+    function processNewContent() {
+        var newElements = document.querySelectorAll('p, div, span, li, td, blockquote, cite, h1, h2, h3, h4, h5, h6');
+        var elementsToProcess = [];
+        
+        for (var i = 0; i < newElements.length; i++) {
+            var el = newElements[i];
+            if (!el.getAttribute("sg-flag") && el.textContent && el.textContent.length > 10) {
+                // Skip if already contains scripture links
+                if (!el.querySelector('.sg_autolink')) {
+                    elementsToProcess.push(el);
+                }
+            }
+        }
+        
+        if (elementsToProcess.length > 0) {
+            processElementsBatch(elementsToProcess, 0);
+        }
+        
+        // Always check for new links to add event listeners
+        addEventListenersToLinks();
+    }
+    
+    // Helper function to process a batch of elements
+    function processElementsBatch(elements, startIndex) {
+        var processed = 0;
+        var maxBatch = 5; // Smaller batches for new content
+        var startTime = Date.now();
+        
+        for (var i = startIndex; i < elements.length && processed < maxBatch; i++) {
+            var element = elements[i];
+            
+            if (!document.contains(element) || element.getAttribute("sg-flag")) {
+                continue;
+            }
+            
+            var originalHTML = element.innerHTML;
+            
+            if (originalHTML.length > 3000) {
+                element.setAttribute("sg-flag", "true");
+                continue;
+            }
+            
+            // Skip elements with complex CSS classes that might cause corruption
+            if (originalHTML.indexOf('class="text-') > -1 || 
+                originalHTML.indexOf('hover:') > -1 ||
+                originalHTML.indexOf('focus-visible') > -1) {
+                element.setAttribute("sg-flag", "true");
+                continue;
+            }
+            
+            try {
+                var processedHTML = detectReferences(originalHTML, function(reference) {
+                    var link = reference.trim().toLowerCase().replace(/[\s:]+/g, '.').replace(/\.+/g, '.').replace(/;\./g, ';').replace(/,\./g, ',');
+                    return '<a class="sg_autolink" sg-flag="true" href="https://scripture.guide/' + link + '" target="_blank">' + reference + '</a>';
+                });
+
+                if (processedHTML !== originalHTML) {
+                    // Safety check for corruption
+                    if (processedHTML.length > originalHTML.length * 2) {
+                        element.setAttribute("sg-flag", "true");
+                        continue;
+                    }
+                    
+                    element.innerHTML = processedHTML;
+                }
+            } catch (e) {
+                // Skip problematic elements
+            }
+            
+            element.setAttribute("sg-flag", "true");
+            processed++;
+            
+            // Break if processing too long
+            if (Date.now() - startTime > 30) break;
+        }
+        
+        // Continue with remaining elements
+        var nextIndex = startIndex + processed;
+        if (nextIndex < elements.length) {
+            setTimeout(function() {
+                processElementsBatch(elements, nextIndex);
+            }, 50);
+        } else {
+            // Done processing new content
+            addEventListenersToLinks();
+        }
+    }
+    
+    // Start processing with delay
+    if (elementsToProcess.length > 0) {
+        setTimeout(processBatch, 500); // Give page time to load
+    } else {
+        addEventListenersToLinks();
+    }
 }
